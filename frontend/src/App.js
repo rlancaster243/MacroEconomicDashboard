@@ -17,6 +17,10 @@ import {
 import { Line, Bar } from "react-chartjs-2";
 import moment from "moment";
 
+// Import FRED services
+import { fetchMultipleFredSeries, FRED_SERIES } from "./services/fredService";
+import LoadingSpinner from "./components/LoadingSpinner";
+
 // Register Chart.js components
 ChartJS.register(
   CategoryScale,
@@ -34,84 +38,23 @@ ChartJS.register(
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Mock data (to be replaced with actual API calls)
-const mockData = {
-  gdp: {
-    title: "GDP Growth Rate",
-    data: [2.1, 2.2, 1.8, 1.1, 0.2, 0.1, 0.5, 1.3, 1.9, 2.3, 2.7, 2.9],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 2.9,
-    change: 0.2,
-    unit: "%",
-    source: "FRED"
-  },
-  unemployment: {
-    title: "Unemployment Rate",
-    data: [4.2, 4.1, 4.0, 3.9, 3.9, 3.8, 3.7, 3.7, 3.6, 3.7, 3.8, 3.7],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 3.7,
-    change: -0.1,
-    unit: "%",
-    source: "BLS"
-  },
-  inflation: {
-    title: "Inflation (CPI)",
-    data: [2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.3, 3.2, 3.1, 3.0, 2.9, 2.8],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 2.8,
-    change: -0.1,
-    unit: "%",
-    source: "BLS"
-  },
-  interestRate: {
-    title: "Federal Funds Rate",
-    data: [5.25, 5.25, 5.25, 5.25, 5.25, 5.25, 5.25, 5.25, 5.25, 5.0, 4.75, 4.5],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 4.5,
-    change: -0.25,
-    unit: "%",
-    source: "FRED"
-  },
-  stockMarket: {
-    title: "S&P 500",
-    data: [4200, 4250, 4300, 4350, 4400, 4450, 4500, 4550, 4600, 4650, 4700, 4750],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 4750,
-    change: 50,
-    unit: "",
-    source: "FRED"
-  },
-  housing: {
-    title: "Median Home Price",
-    data: [380000, 382000, 385000, 387000, 390000, 392000, 395000, 398000, 400000, 403000, 405000, 408000],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 408000,
-    change: 3000,
-    unit: "$",
-    source: "FRED"
-  },
-  tradeBalance: {
-    title: "Trade Balance",
-    data: [-65, -63, -62, -60, -58, -57, -55, -54, -52, -51, -49, -48],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: -48,
-    change: 1,
-    unit: "$ Billion",
-    source: "BEA"
-  },
-  manufacturing: {
-    title: "Manufacturing PMI",
-    data: [49, 48.5, 48.8, 49.2, 49.5, 50.1, 50.3, 50.5, 50.8, 51.2, 51.5, 51.8],
-    labels: [...Array(12)].map((_, i) => moment().subtract(12 - i, 'months').format('MMM YYYY')),
-    currentValue: 51.8,
-    change: 0.3,
-    unit: "",
-    source: "World Bank"
+// Helper function to format numbers with proper units
+const formatNumber = (value, unit = '') => {
+  if (unit === '$' || unit === 'USD') {
+    return `$${value.toLocaleString()}`;
+  } else if (unit === '%') {
+    return `${value.toFixed(1)}%`;
+  } else if (unit === '$ Billion') {
+    return `$${value.toFixed(1)} B`;
+  } else {
+    return value.toLocaleString();
   }
 };
 
 // Helper function to create chart data
 const createChartData = (dataset, color) => {
+  if (!dataset) return null;
+  
   return {
     labels: dataset.labels,
     datasets: [
@@ -157,6 +100,17 @@ const Header = () => {
 
 // Indicator Card Component
 const IndicatorCard = ({ data, color }) => {
+  if (!data) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-4 border-l-4 animate-pulse" style={{ borderLeftColor: color }}>
+        <div className="h-5 bg-gray-200 rounded w-3/4 mb-2"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+        <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+      </div>
+    );
+  }
+  
   const changeClass = data.change >= 0 
     ? "text-green-500" 
     : "text-red-500";
@@ -166,7 +120,7 @@ const IndicatorCard = ({ data, color }) => {
     : "↓";
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 border-l-4" style={{ borderLeftColor: color }}>
+    <div className="bg-white rounded-lg shadow-md p-4 border-l-4 indicator-card" style={{ borderLeftColor: color }}>
       <div className="flex justify-between items-start">
         <div>
           <h3 className="text-lg font-semibold text-gray-700">{data.title}</h3>
@@ -177,9 +131,14 @@ const IndicatorCard = ({ data, color }) => {
         </span>
       </div>
       <div className="mt-4">
-        <div className="text-2xl font-bold">{data.currentValue}</div>
+        <div className="text-2xl font-bold">{formatNumber(data.currentValue, data.unit)}</div>
         <div className={`text-sm font-medium ${changeClass} flex items-center mt-1`}>
-          {changeIcon} {Math.abs(data.change)} ({(Math.abs(data.change) / (data.currentValue - data.change) * 100).toFixed(1)}%)
+          {changeIcon} {Math.abs(data.change).toFixed(2)} 
+          {data.previousValue !== 0 && (
+            <span className="ml-1">
+              ({(Math.abs(data.change) / Math.abs(data.previousValue) * 100).toFixed(1)}%)
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -197,16 +156,23 @@ const DashboardSection = ({ title, children }) => {
 };
 
 // Chart Container Component
-const ChartContainer = ({ children }) => {
+const ChartContainer = ({ title, children, isLoading }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-4 h-full">
-      {children}
+      <h3 className="text-lg font-semibold text-gray-700 mb-2">{title}</h3>
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-700"></div>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 };
 
 // Indicators Grid Component
-const IndicatorsGrid = () => {
+const IndicatorsGrid = ({ indicators, isLoading }) => {
   const colors = [
     "#3B82F6", // blue-500
     "#10B981", // emerald-500
@@ -218,19 +184,29 @@ const IndicatorsGrid = () => {
     "#F97316", // orange-500
   ];
 
-  const indicators = Object.keys(mockData);
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {indicators.map((key, index) => (
-        <IndicatorCard key={key} data={mockData[key]} color={colors[index % colors.length]} />
-      ))}
+      {isLoading ? (
+        // Skeleton loaders
+        Array(8).fill(0).map((_, index) => (
+          <IndicatorCard key={index} color={colors[index % colors.length]} />
+        ))
+      ) : (
+        // Actual data
+        Object.keys(indicators).map((key, index) => (
+          <IndicatorCard 
+            key={key} 
+            data={indicators[key]} 
+            color={colors[index % colors.length]} 
+          />
+        ))
+      )}
     </div>
   );
 };
 
 // Chart Grid Component
-const ChartGrid = () => {
+const ChartGrid = ({ indicators, isLoading }) => {
   const colors = [
     "#3B82F6", // blue-500
     "#10B981", // emerald-500
@@ -242,26 +218,36 @@ const ChartGrid = () => {
     "#F97316", // orange-500
   ];
 
-  const indicators = Object.keys(mockData);
+  const chartIndicators = Object.keys(indicators);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-      {indicators.slice(0, 4).map((key, index) => (
-        <ChartContainer key={key}>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">{mockData[key].title}</h3>
-          <Line 
-            data={createChartData(mockData[key], colors[index % colors.length])} 
-            options={chartOptions} 
-          />
+      {chartIndicators.slice(0, 4).map((key, index) => (
+        <ChartContainer 
+          key={key} 
+          title={indicators[key]?.title || 'Loading...'}
+          isLoading={isLoading}
+        >
+          {indicators[key] && (
+            <Line 
+              data={createChartData(indicators[key], colors[index % colors.length])} 
+              options={chartOptions} 
+            />
+          )}
         </ChartContainer>
       ))}
-      {indicators.slice(4).map((key, index) => (
-        <ChartContainer key={key}>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">{mockData[key].title}</h3>
-          <Bar 
-            data={createChartData(mockData[key], colors[(index + 4) % colors.length])} 
-            options={chartOptions} 
-          />
+      {chartIndicators.slice(4).map((key, index) => (
+        <ChartContainer 
+          key={key} 
+          title={indicators[key]?.title || 'Loading...'}
+          isLoading={isLoading}
+        >
+          {indicators[key] && (
+            <Bar 
+              data={createChartData(indicators[key], colors[(index + 4) % colors.length])} 
+              options={chartOptions} 
+            />
+          )}
         </ChartContainer>
       ))}
     </div>
@@ -269,13 +255,21 @@ const ChartGrid = () => {
 };
 
 // Comparison Tool Component
-const ComparisonTool = () => {
-  const [indicators, setIndicators] = useState(['gdp', 'unemployment']);
+const ComparisonTool = ({ indicators, isLoading }) => {
+  const [selectedIndicators, setSelectedIndicators] = useState([]);
   const [dateRange, setDateRange] = useState('1year');
 
-  const indicatorOptions = Object.keys(mockData).map(key => ({
+  useEffect(() => {
+    // Initialize with first two indicators when data is loaded
+    if (!isLoading && Object.keys(indicators).length > 0) {
+      const indicatorKeys = Object.keys(indicators);
+      setSelectedIndicators(indicatorKeys.slice(0, 2));
+    }
+  }, [isLoading, indicators]);
+
+  const indicatorOptions = Object.keys(indicators).map(key => ({
     value: key,
-    label: mockData[key].title
+    label: indicators[key]?.title || key
   }));
 
   const dateRangeOptions = [
@@ -300,144 +294,223 @@ const ComparisonTool = () => {
   };
 
   // Create data for comparison chart
-  const comparisonData = {
-    labels: getLabels(),
-    datasets: indicators.map((ind, index) => ({
-      label: mockData[ind].title,
-      data: mockData[ind].data.slice(-getLabels().length),
-      borderColor: colors[index % colors.length],
-      backgroundColor: `${colors[index % colors.length]}33`,
-      borderWidth: 2,
-      fill: false,
-      tension: 0.4,
-    }))
+  const createComparisonData = () => {
+    if (isLoading || selectedIndicators.length === 0) {
+      return {
+        labels: getLabels(),
+        datasets: []
+      };
+    }
+
+    return {
+      labels: getLabels(),
+      datasets: selectedIndicators.map((ind, index) => {
+        if (!indicators[ind]) return null;
+        
+        // Adjust data length to match labels length
+        const data = indicators[ind].data || [];
+        const slicedData = data.slice(-getLabels().length);
+        
+        // If data length is less than labels length, pad with nulls
+        const paddedData = slicedData.length < getLabels().length 
+          ? [...Array(getLabels().length - slicedData.length).fill(null), ...slicedData]
+          : slicedData;
+        
+        return {
+          label: indicators[ind].title,
+          data: paddedData,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `${colors[index % colors.length]}33`,
+          borderWidth: 2,
+          fill: false,
+          tension: 0.4,
+        }
+      }).filter(Boolean)
+    };
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-700 mb-4">Indicator Comparison Tool</h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select Indicators (Up to 2)
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {indicatorOptions.map(option => (
-              <button
-                key={option.value}
-                onClick={() => {
-                  if (indicators.includes(option.value)) {
-                    setIndicators(indicators.filter(i => i !== option.value));
-                  } else if (indicators.length < 2) {
-                    setIndicators([...indicators, option.value]);
-                  }
-                }}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  indicators.includes(option.value)
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+      {isLoading ? (
+        <LoadingSpinner message="Loading comparison data..." />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Indicators (Up to 2)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {indicatorOptions.map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      if (selectedIndicators.includes(option.value)) {
+                        setSelectedIndicators(selectedIndicators.filter(i => i !== option.value));
+                      } else if (selectedIndicators.length < 2) {
+                        setSelectedIndicators([...selectedIndicators, option.value]);
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      selectedIndicators.includes(option.value)
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time Range
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {dateRangeOptions.map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => setDateRange(option.value)}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      dateRange === option.value
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Time Range
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {dateRangeOptions.map(option => (
-              <button
-                key={option.value}
-                onClick={() => setDateRange(option.value)}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  dateRange === option.value
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          
+          <div className="h-80">
+            <Line 
+              data={createComparisonData()} 
+              options={{
+                ...chartOptions,
+                maintainAspectRatio: false,
+              }} 
+            />
           </div>
-        </div>
-      </div>
-      
-      <div className="h-80">
-        <Line 
-          data={comparisonData} 
-          options={{
-            ...chartOptions,
-            maintainAspectRatio: false,
-          }} 
-        />
-      </div>
+        </>
+      )}
     </div>
   );
 };
 
 // Heat Map Component
-const HeatMap = () => {
-  // Sample correlation data between indicators
-  const correlationData = [
-    [1.0, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
-    [0.7, 1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2],
-    [0.6, 0.8, 1.0, 0.7, 0.6, 0.5, 0.4, 0.3],
-    [0.5, 0.6, 0.7, 1.0, 0.7, 0.6, 0.5, 0.4],
-    [0.4, 0.5, 0.6, 0.7, 1.0, 0.7, 0.6, 0.5],
-    [0.3, 0.4, 0.5, 0.6, 0.7, 1.0, 0.7, 0.6],
-    [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0, 0.7],
-    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0]
-  ];
+const HeatMap = ({ indicators, isLoading }) => {
+  // Dynamically calculate correlation between indicators
+  const calculateCorrelation = () => {
+    if (isLoading || !indicators || Object.keys(indicators).length === 0) {
+      return [];
+    }
+    
+    const indicatorKeys = Object.keys(indicators);
+    const result = [];
+    
+    // For each pair of indicators, calculate correlation
+    for (let i = 0; i < indicatorKeys.length; i++) {
+      const row = [];
+      for (let j = 0; j < indicatorKeys.length; j++) {
+        if (i === j) {
+          // Perfect correlation with self
+          row.push(1.0);
+        } else {
+          // Simple mock correlation based on the data trend
+          // In a real app, you'd use proper statistical methods
+          const data1 = indicators[indicatorKeys[i]]?.data || [];
+          const data2 = indicators[indicatorKeys[j]]?.data || [];
+          
+          // Ensure both datasets have data
+          if (data1.length === 0 || data2.length === 0) {
+            row.push(0);
+            continue;
+          }
+          
+          // Use a very simplified correlation approximation
+          // Compare the direction of change over time
+          let matchingDirections = 0;
+          let total = 0;
+          
+          // Use the minimum length of the two datasets
+          const minLength = Math.min(data1.length, data2.length);
+          
+          for (let k = 1; k < minLength; k++) {
+            const dir1 = data1[k] > data1[k-1] ? 1 : -1;
+            const dir2 = data2[k] > data2[k-1] ? 1 : -1;
+            
+            if (dir1 === dir2) matchingDirections++;
+            total++;
+          }
+          
+          // Calculate pseudo-correlation (-1 to 1)
+          const pseudoCorrelation = total > 0 
+            ? (matchingDirections / total) * 2 - 1 
+            : 0;
+          
+          row.push(Math.abs(pseudoCorrelation));
+        }
+      }
+      result.push(row);
+    }
+    
+    return result;
+  };
 
-  const indicators = Object.keys(mockData).map(key => mockData[key].title);
+  const correlationData = calculateCorrelation();
+  const indicatorNames = Object.keys(indicators).map(key => indicators[key]?.title || key);
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-700 mb-4">Indicator Correlation Heat Map</h3>
       
-      <div className="overflow-x-auto">
-        <table className="min-w-full">
-          <thead>
-            <tr>
-              <th className="px-3 py-2 bg-gray-100"></th>
-              {indicators.map((ind, i) => (
-                <th key={i} className="px-3 py-2 text-xs bg-gray-100">{ind}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {correlationData.map((row, i) => (
-              <tr key={i}>
-                <th className="px-3 py-2 text-xs text-left bg-gray-100">{indicators[i]}</th>
-                {row.map((value, j) => {
-                  // Calculate background color intensity based on correlation
-                  const intensity = Math.floor(value * 255);
-                  const bgColor = value >= 0.7 
-                    ? `rgba(220, 38, 38, ${value})` // Red for high positive correlation
-                    : value >= 0.4 
-                      ? `rgba(251, 146, 60, ${value})` // Orange for medium positive correlation
-                      : `rgba(249, 250, 251, ${Math.max(0.1, value)})`; // Light gray for low correlation
-                  
-                  return (
-                    <td 
-                      key={j} 
-                      className="px-4 py-2 text-center text-sm" 
-                      style={{ backgroundColor: bgColor }}
-                    >
-                      {value.toFixed(1)}
-                    </td>
-                  );
-                })}
+      {isLoading ? (
+        <LoadingSpinner message="Calculating correlations..." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr>
+                <th className="px-3 py-2 bg-gray-100"></th>
+                {indicatorNames.map((ind, i) => (
+                  <th key={i} className="px-3 py-2 text-xs bg-gray-100">{ind}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {correlationData.map((row, i) => (
+                <tr key={i}>
+                  <th className="px-3 py-2 text-xs text-left bg-gray-100">{indicatorNames[i]}</th>
+                  {row.map((value, j) => {
+                    // Calculate background color intensity based on correlation
+                    const intensity = Math.floor(value * 255);
+                    const bgColor = value >= 0.7 
+                      ? `rgba(220, 38, 38, ${value})` // Red for high positive correlation
+                      : value >= 0.4 
+                        ? `rgba(251, 146, 60, ${value})` // Orange for medium positive correlation
+                        : `rgba(249, 250, 251, ${Math.max(0.1, value)})`; // Light gray for low correlation
+                    
+                    return (
+                      <td 
+                        key={j} 
+                        className="px-4 py-2 text-center text-sm" 
+                        style={{ backgroundColor: bgColor }}
+                      >
+                        {value.toFixed(1)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
@@ -469,22 +542,72 @@ const DataSources = () => {
 
 // Main Dashboard Component
 const Dashboard = () => {
+  const [indicators, setIndicators] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // List of FRED series IDs to fetch
+  const indicatorKeys = [
+    'gdpGrowth',
+    'unemployment',
+    'inflationRate',
+    'federalFundsRate',
+    'sp500',
+    'housing',
+    'tradeBalance',
+    'manufacturing'
+  ];
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Fetch data from FRED API
+        const data = await fetchMultipleFredSeries(indicatorKeys);
+        
+        setIndicators(data);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching economic data:', error);
+        setError('Failed to load economic data. Please try again later.');
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="bg-gray-50 min-h-screen">
+        <Header />
+        <main className="container mx-auto px-4 py-12">
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded">
+            <p className="font-bold">Error</p>
+            <p>{error}</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-50 min-h-screen">
       <Header />
       <main className="container mx-auto px-4 py-8">
         <DashboardSection title="Current Economic Indicators">
-          <IndicatorsGrid />
+          <IndicatorsGrid indicators={indicators} isLoading={isLoading} />
         </DashboardSection>
         
         <DashboardSection title="Historical Trends">
-          <ChartGrid />
+          <ChartGrid indicators={indicators} isLoading={isLoading} />
         </DashboardSection>
         
         <DashboardSection title="Comparison & Analysis">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ComparisonTool />
-            <HeatMap />
+            <ComparisonTool indicators={indicators} isLoading={isLoading} />
+            <HeatMap indicators={indicators} isLoading={isLoading} />
           </div>
         </DashboardSection>
         
