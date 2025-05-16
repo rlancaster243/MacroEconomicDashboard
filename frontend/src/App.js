@@ -1116,26 +1116,38 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+
+        // Initialize with empty data
+        let allData = {};
         
-        // Fetch data from FRED API
-        const fredData = await fetchMultipleFredSeries(indicatorKeys);
+        // Fetch data from FRED API - this is our primary source
+        try {
+          console.log('Fetching FRED data...');
+          const fredData = await fetchMultipleFredSeries(indicatorKeys);
+          allData = { ...allData, ...fredData };
+          console.log('FRED data fetched successfully');
+        } catch (error) {
+          console.error('Error fetching FRED data:', error);
+        }
         
         // Fetch BEA data
-        let beaData = {};
         try {
+          console.log('Fetching BEA data...');
           const beaGDP = await fetchGDPData();
           const beaTradeBalance = await fetchTradeBalanceData();
-          beaData = {
+          allData = { 
+            ...allData, 
             beaGDP,
-            beaTradeBalance
+            beaTradeBalance 
           };
+          console.log('BEA data fetched successfully');
         } catch (error) {
-          console.error('Error fetching BEA data (continuing with other sources):', error);
+          console.error('Error fetching BEA data:', error);
         }
         
         // Fetch BLS data
-        let blsData = {};
         try {
+          console.log('Fetching BLS data...');
           // Get array of series IDs for BLS
           const blsSeriesIds = [
             BLS_SERIES.unemployment.id,
@@ -1147,18 +1159,21 @@ const Dashboard = () => {
           const blsResults = await fetchMultipleBLSSeries(blsSeriesIds);
           
           // Map results to appropriate keys
-          blsData = {
+          const blsData = {
             blsUnemployment: blsResults[BLS_SERIES.unemployment.id],
             blsCPI: blsResults[BLS_SERIES.cpi.id],
             blsWages: blsResults[BLS_SERIES.wages.id]
           };
+          
+          allData = { ...allData, ...blsData };
+          console.log('BLS data fetched successfully');
         } catch (error) {
-          console.error('Error fetching BLS data (continuing with other sources):', error);
+          console.error('Error fetching BLS data:', error);
         }
         
         // Fetch World Bank data
-        let worldBankData = {};
         try {
+          console.log('Fetching World Bank data...');
           // Get array of indicator IDs for World Bank
           const worldBankIndicatorIds = [
             WORLD_BANK_INDICATORS.gdpGrowth,
@@ -1168,18 +1183,21 @@ const Dashboard = () => {
           
           // Fetch World Bank data
           const worldBankResults = await fetchMultipleWorldBankIndicators(worldBankIndicatorIds);
-          worldBankData = worldBankResults;
+          allData = { ...allData, ...worldBankResults };
+          console.log('World Bank data fetched successfully');
         } catch (error) {
-          console.error('Error fetching World Bank data (continuing with other sources):', error);
+          console.error('Error fetching World Bank data:', error);
         }
         
-        // Set all indicators in state
-        setIndicators({
-          ...fredData,
-          ...beaData,
-          ...blsData,
-          ...worldBankData
-        });
+        // If we have at least some data, set it and clear any errors
+        if (Object.keys(allData).length > 0) {
+          setIndicators(allData);
+          setError(null);
+          console.log('Data loaded successfully:', Object.keys(allData));
+        } else {
+          // If we have no data at all, show an error
+          setError('Failed to load economic data from any source. Please try again later.');
+        }
         
         setIsLoading(false);
       } catch (error) {
