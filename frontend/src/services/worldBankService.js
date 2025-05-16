@@ -85,11 +85,14 @@ export const fetchMultipleWorldBankIndicators = async (indicators, options = {})
     const promises = indicators.map(indicator => fetchWorldBankData(indicator, options));
     const results = await Promise.all(promises);
     
-    return results.reduce((acc, result, index) => {
-      const indicatorKey = `worldBank_${indicators[index].replace(/\./g, '_')}`;
-      acc[indicatorKey] = result;
-      return acc;
-    }, {});
+    const resultMap = {};
+    indicators.forEach((indicator, index) => {
+      // Create a friendly key name based on the indicator
+      const keyName = `wb_${indicator.split('.').join('_')}`;
+      resultMap[keyName] = results[index];
+    });
+    
+    return resultMap;
   } catch (error) {
     console.error('Error fetching multiple World Bank indicators:', error);
     throw error;
