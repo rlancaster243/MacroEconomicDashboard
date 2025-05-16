@@ -8,7 +8,7 @@ const WORLD_BANK_BASE_URL = 'https://api.worldbank.org/v2';
 const US_COUNTRY_CODE = 'USA';
 
 // World Bank indicator codes
-const WORLD_BANK_INDICATORS = {
+export const WORLD_BANK_INDICATORS = {
   gdp: 'NY.GDP.MKTP.CD', // GDP (current US$)
   gdpGrowth: 'NY.GDP.MKTP.KD.ZG', // GDP growth (annual %)
   inflation: 'FP.CPI.TOTL.ZG', // Inflation, consumer prices (annual %)
