@@ -122,37 +122,15 @@ export const fetchMultipleBLSSeries = async (seriesIds, options = {}) => {
     const promises = seriesIds.map(id => fetchBLSData(id, options));
     const results = await Promise.all(promises);
     
-    return results.reduce((acc, result, index) => {
-      const seriesKey = seriesIds[index];
-      acc[seriesKey] = result;
-      return acc;
-    }, {});
+    // Create a mapping of series ID to result
+    const resultMap = {};
+    results.forEach((result, index) => {
+      resultMap[seriesIds[index]] = result;
+    });
+    
+    return resultMap;
   } catch (error) {
     console.error('Error fetching multiple BLS series:', error);
     throw error;
-  }
-};
-
-// Export BLS datasets
-export const BLS_DATASETS = {
-  unemployment: {
-    id: BLS_SERIES.unemployment,
-    title: 'Unemployment Rate (BLS)',
-    frequency: 'monthly'
-  },
-  cpi: {
-    id: BLS_SERIES.cpi,
-    title: 'Consumer Price Index (BLS)',
-    frequency: 'monthly'
-  },
-  payroll: {
-    id: BLS_SERIES.payroll,
-    title: 'Nonfarm Payroll (BLS)',
-    frequency: 'monthly'
-  },
-  wages: {
-    id: BLS_SERIES.wages,
-    title: 'Average Hourly Earnings (BLS)',
-    frequency: 'monthly'
   }
 };
