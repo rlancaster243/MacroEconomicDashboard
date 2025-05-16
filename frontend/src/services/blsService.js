@@ -1,8 +1,8 @@
 import axios from 'axios';
 import moment from 'moment';
 
-// Will be populated with the API key once provided
-const BLS_API_KEY = process.env.REACT_APP_BLS_API_KEY || '';
+// BLS API configuration with provided key
+const BLS_API_KEY = process.env.REACT_APP_BLS_API_KEY;
 const BLS_BASE_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
 
 // BLS Series IDs
@@ -23,13 +23,13 @@ export const fetchBLSData = async (seriesId, options = {}) => {
   try {
     // Calculate default date range (last 2 years)
     const endYear = moment().year();
-    const startYear = endYear - 2;
+    const startYear = options.startYear || (endYear - 2);
     
     // Format the request data
     const requestData = {
       seriesid: [seriesId],
-      startyear: options.startYear || startYear,
-      endyear: options.endYear || endYear,
+      startyear: startYear.toString(),
+      endyear: endYear.toString(),
       registrationkey: BLS_API_KEY
     };
     
@@ -38,7 +38,7 @@ export const fetchBLSData = async (seriesId, options = {}) => {
     
     // Check for errors
     if (response.data.status !== 'REQUEST_SUCCEEDED') {
-      throw new Error(`BLS API Error: ${response.data.message}`);
+      throw new Error(`BLS API Error: ${response.data.message || 'Unknown error'}`);
     }
     
     // Process the data
@@ -110,6 +110,28 @@ const getBLSSeriesUnit = (seriesId) => {
       return '$';
     default:
       return '';
+  }
+};
+
+/**
+ * Fetch multiple BLS indicators at once
+ * @param {Array} seriesIds - Array of BLS series IDs to fetch
+ * @param {Object} options - Optional parameters
+ * @returns {Promise<Object>} - Object with processed results for each series
+ */
+export const fetchMultipleBLSSeries = async (seriesIds, options = {}) => {
+  try {
+    const promises = seriesIds.map(id => fetchBLSData(id, options));
+    const results = await Promise.all(promises);
+    
+    return results.reduce((acc, result, index) => {
+      const seriesKey = seriesIds[index];
+      acc[seriesKey] = result;
+      return acc;
+    }, {});
+  } catch (error) {
+    console.error('Error fetching multiple BLS series:', error);
+    throw error;
   }
 };
 
