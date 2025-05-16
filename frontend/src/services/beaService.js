@@ -1,7 +1,8 @@
 import axios from 'axios';
+import moment from 'moment';
 
-// Will be populated with the API key once provided
-const BEA_API_KEY = process.env.REACT_APP_BEA_API_KEY || '';
+// BEA API configuration
+const BEA_API_KEY = process.env.REACT_APP_BEA_API_KEY;
 const BEA_BASE_URL = 'https://apps.bea.gov/api/data';
 
 /**
@@ -11,7 +12,11 @@ const BEA_BASE_URL = 'https://apps.bea.gov/api/data';
  */
 export const fetchGDPData = async (options = {}) => {
   try {
-    // Example BEA API call for GDP data - this will be updated once we have the API key
+    // Calculate year range (default to last 5 years)
+    const currentYear = moment().year();
+    const startYear = options.year || (currentYear - 5);
+    
+    // BEA API call for GDP data
     const response = await axios.get(BEA_BASE_URL, {
       params: {
         UserID: BEA_API_KEY,
@@ -19,20 +24,49 @@ export const fetchGDPData = async (options = {}) => {
         datasetname: 'NIPA',
         TableName: 'T10101',
         Frequency: 'Q',
-        Year: options.year || 'X', // 'X' for all available years
-        Quarter: options.quarter || 'X', // 'X' for all available quarters
+        Year: `${startYear},${currentYear}`,
+        GeoFips: 'USA',
         ResultFormat: 'JSON'
       }
     });
-
-    // This is a placeholder for now - will implement proper data processing once we have the API key
+    
+    // Check if we got valid data
+    if (!response.data || !response.data.BEAAPI || !response.data.BEAAPI.Results || !response.data.BEAAPI.Results.Data) {
+      throw new Error('Invalid response from BEA API');
+    }
+    
+    // Process the data
+    const rawData = response.data.BEAAPI.Results.Data;
+    
+    // Filter to get GDP data (LineNumber 1 is GDP in Table 1.1.1)
+    const gdpData = rawData.filter(item => item.LineNumber === '1');
+    
+    // Sort by year and quarter
+    gdpData.sort((a, b) => {
+      if (a.TimePeriod === b.TimePeriod) return 0;
+      return a.TimePeriod < b.TimePeriod ? -1 : 1;
+    });
+    
+    // Format the data for our dashboard
+    const values = gdpData.map(item => parseFloat(item.DataValue));
+    const labels = gdpData.map(item => {
+      const year = item.Year;
+      const quarter = item.Quarter;
+      return `${year} Q${quarter}`;
+    });
+    
+    // Calculate change
+    const currentValue = values[values.length - 1];
+    const previousValue = values[values.length - 2] || 0;
+    const change = currentValue - previousValue;
+    
     return {
       title: 'GDP (BEA)',
-      data: [],
-      labels: [],
-      currentValue: 0,
-      previousValue: 0,
-      change: 0,
+      data: values,
+      labels,
+      currentValue,
+      previousValue,
+      change,
       unit: '$ Billion',
       source: 'BEA'
     };
@@ -49,28 +83,64 @@ export const fetchGDPData = async (options = {}) => {
  */
 export const fetchTradeBalanceData = async (options = {}) => {
   try {
-    // Example BEA API call for Trade Balance data - this will be updated once we have the API key
+    // Calculate year range (default to last 2 years)
+    const currentYear = moment().year();
+    const startYear = options.year || (currentYear - 2);
+    
+    // BEA API call for International Transactions data
     const response = await axios.get(BEA_BASE_URL, {
       params: {
         UserID: BEA_API_KEY,
         method: 'GetData',
         datasetname: 'ITA',
-        TableName: 'itable1',
-        Frequency: 'M',
-        Year: options.year || 'X', // 'X' for all available years
-        Month: options.month || 'X', // 'X' for all available months
+        TableName: 'ITA-TRADE',
+        Frequency: 'Q',
+        Year: `${startYear},${currentYear}`,
+        AreaOrCountry: 'AllCountries',
         ResultFormat: 'JSON'
       }
     });
-
-    // This is a placeholder for now - will implement proper data processing once we have the API key
+    
+    // Check if we got valid data
+    if (!response.data || !response.data.BEAAPI || !response.data.BEAAPI.Results || !response.data.BEAAPI.Results.Data) {
+      throw new Error('Invalid response from BEA API');
+    }
+    
+    // Process the data
+    const rawData = response.data.BEAAPI.Results.Data;
+    
+    // Filter to get trade balance data (using indicator code for balance of goods and services)
+    const tradeData = rawData.filter(item => 
+      item.Indicator === 'Balance on goods and services' && 
+      item.AreaOrCountry === 'All Countries'
+    );
+    
+    // Sort by time period
+    tradeData.sort((a, b) => {
+      if (a.TimePeriod === b.TimePeriod) return 0;
+      return a.TimePeriod < b.TimePeriod ? -1 : 1;
+    });
+    
+    // Format the data for our dashboard
+    const values = tradeData.map(item => parseFloat(item.DataValue));
+    const labels = tradeData.map(item => {
+      const year = item.Year;
+      const quarter = item.Quarter;
+      return `${year} Q${quarter}`;
+    });
+    
+    // Calculate change
+    const currentValue = values[values.length - 1];
+    const previousValue = values[values.length - 2] || 0;
+    const change = currentValue - previousValue;
+    
     return {
       title: 'Trade Balance (BEA)',
-      data: [],
-      labels: [],
-      currentValue: 0,
-      previousValue: 0,
-      change: 0,
+      data: values,
+      labels,
+      currentValue,
+      previousValue,
+      change,
       unit: '$ Billion',
       source: 'BEA'
     };
@@ -90,6 +160,6 @@ export const BEA_DATASETS = {
   tradeBalance: {
     id: 'TRADE',
     title: 'Trade Balance (BEA)',
-    frequency: 'monthly'
+    frequency: 'quarterly'
   }
 };
