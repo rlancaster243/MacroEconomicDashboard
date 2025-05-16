@@ -19,7 +19,14 @@ import moment from "moment";
 
 // Import services
 import { fetchMultipleFredSeries, FRED_SERIES } from "./services/fredService";
-import { fetchWorldBankData, WORLD_BANK_DATASETS } from "./services/worldBankService";
+import { fetchGDPData, fetchTradeBalanceData } from "./services/beaService";
+import { fetchMultipleBLSSeries, BLS_SERIES } from "./services/blsService";
+import { 
+  fetchWorldBankData, 
+  fetchMultipleWorldBankIndicators, 
+  WORLD_BANK_DATASETS,
+  WORLD_BANK_INDICATORS
+} from "./services/worldBankService";
 
 // Import components
 import LoadingSpinner from "./components/LoadingSpinner";
