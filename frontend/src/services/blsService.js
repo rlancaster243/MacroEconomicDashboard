@@ -6,11 +6,23 @@ const BLS_API_KEY = process.env.REACT_APP_BLS_API_KEY;
 const BLS_BASE_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
 
 // BLS Series IDs
-const BLS_SERIES = {
-  unemployment: 'LNS14000000', // Unemployment Rate
-  cpi: 'CUUR0000SA0', // Consumer Price Index - All Urban Consumers
-  payroll: 'CES0000000001', // Total Nonfarm Payroll
-  wages: 'CES0500000003' // Average Hourly Earnings
+export const BLS_SERIES = {
+  unemployment: {
+    id: 'LNS14000000', // Unemployment Rate
+    title: 'Unemployment Rate (BLS)'
+  },
+  cpi: {
+    id: 'CUUR0000SA0', // Consumer Price Index - All Urban Consumers
+    title: 'Consumer Price Index (BLS)'
+  },
+  payroll: {
+    id: 'CES0000000001', // Total Nonfarm Payroll
+    title: 'Nonfarm Payroll (BLS)'
+  },
+  wages: {
+    id: 'CES0500000003', // Average Hourly Earnings
+    title: 'Average Hourly Earnings (BLS)'
+  }
 };
 
 /**
