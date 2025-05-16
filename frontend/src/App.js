@@ -17,9 +17,21 @@ import {
 import { Line, Bar } from "react-chartjs-2";
 import moment from "moment";
 
-// Import FRED services
+// Import services
 import { fetchMultipleFredSeries, FRED_SERIES } from "./services/fredService";
+import { fetchWorldBankData, WORLD_BANK_DATASETS } from "./services/worldBankService";
+
+// Import components
 import LoadingSpinner from "./components/LoadingSpinner";
+import ScatterPlot, { createScatterData } from "./components/ScatterPlot";
+import RadarChart, { createRadarData } from "./components/RadarChart";
+import ForecastChart, { generateSimpleForecast } from "./components/ForecastChart";
+import CustomDateRangePicker from "./components/CustomDateRangePicker";
+import FavoriteIndicators, { useFavorites } from "./components/FavoriteIndicators";
+import CustomizableDashboard, { 
+  DashboardPanel, 
+  useDashboardLayout 
+} from "./components/CustomizableDashboard";
 
 // Register Chart.js components
 ChartJS.register(
@@ -172,7 +184,7 @@ const ChartContainer = ({ title, children, isLoading }) => {
 };
 
 // Indicators Grid Component
-const IndicatorsGrid = ({ indicators, isLoading }) => {
+const IndicatorsGrid = ({ indicators, isLoading, favorites }) => {
   const colors = [
     "#3B82F6", // blue-500
     "#10B981", // emerald-500
@@ -183,6 +195,15 @@ const IndicatorsGrid = ({ indicators, isLoading }) => {
     "#06B6D4", // cyan-500
     "#F97316", // orange-500
   ];
+
+  // Show favorite indicators first if available
+  const orderedIndicators = Object.keys(indicators).sort((a, b) => {
+    const aIsFavorite = favorites.includes(a);
+    const bIsFavorite = favorites.includes(b);
+    if (aIsFavorite && !bIsFavorite) return -1;
+    if (!aIsFavorite && bIsFavorite) return 1;
+    return 0;
+  });
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -193,11 +214,11 @@ const IndicatorsGrid = ({ indicators, isLoading }) => {
         ))
       ) : (
         // Actual data
-        Object.keys(indicators).map((key, index) => (
+        orderedIndicators.map((key, index) => (
           <IndicatorCard 
             key={key} 
             data={indicators[key]} 
-            color={colors[index % colors.length]} 
+            color={favorites.includes(key) ? "#10B981" : colors[index % colors.length]} 
           />
         ))
       )}
@@ -206,7 +227,7 @@ const IndicatorsGrid = ({ indicators, isLoading }) => {
 };
 
 // Chart Grid Component
-const ChartGrid = ({ indicators, isLoading }) => {
+const ChartGrid = ({ indicators, isLoading, selectedIndicators }) => {
   const colors = [
     "#3B82F6", // blue-500
     "#10B981", // emerald-500
@@ -218,7 +239,9 @@ const ChartGrid = ({ indicators, isLoading }) => {
     "#F97316", // orange-500
   ];
 
-  const chartIndicators = Object.keys(indicators);
+  const chartIndicators = selectedIndicators.length > 0 
+    ? selectedIndicators 
+    : Object.keys(indicators).slice(0, 8);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -258,6 +281,7 @@ const ChartGrid = ({ indicators, isLoading }) => {
 const ComparisonTool = ({ indicators, isLoading }) => {
   const [selectedIndicators, setSelectedIndicators] = useState([]);
   const [dateRange, setDateRange] = useState('1year');
+  const [comparisonMode, setComparisonMode] = useState('line'); // 'line', 'scatter', 'radar'
 
   useEffect(() => {
     // Initialize with first two indicators when data is loaded
@@ -279,7 +303,7 @@ const ComparisonTool = ({ indicators, isLoading }) => {
     { value: '2years', label: 'Last 2 Years' },
   ];
 
-  const colors = ["#3B82F6", "#10B981"];
+  const colors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444"];
 
   // Calculate time range for labels
   const getLabels = () => {
@@ -293,8 +317,8 @@ const ComparisonTool = ({ indicators, isLoading }) => {
     return [...Array(months)].map((_, i) => moment().subtract(months - i - 1, 'months').format('MMM YYYY'));
   };
 
-  // Create data for comparison chart
-  const createComparisonData = () => {
+  // Create data for line comparison chart
+  const createLineComparisonData = () => {
     if (isLoading || selectedIndicators.length === 0) {
       return {
         labels: getLabels(),
@@ -329,6 +353,93 @@ const ComparisonTool = ({ indicators, isLoading }) => {
     };
   };
 
+  // Create data for scatter plot comparison
+  const createScatterComparisonData = () => {
+    if (isLoading || selectedIndicators.length < 2) {
+      return { datasets: [] };
+    }
+
+    const ind1 = selectedIndicators[0];
+    const ind2 = selectedIndicators[1];
+
+    if (!indicators[ind1] || !indicators[ind2]) {
+      return { datasets: [] };
+    }
+
+    // Get the data for each indicator
+    const data1 = indicators[ind1].data || [];
+    const data2 = indicators[ind2].data || [];
+
+    // Create points for scatter plot (use minimum length of both datasets)
+    const length = Math.min(data1.length, data2.length);
+    const points = [];
+
+    for (let i = 0; i < length; i++) {
+      points.push({ x: data1[i], y: data2[i] });
+    }
+
+    return {
+      datasets: [
+        {
+          label: `${indicators[ind1].title} vs ${indicators[ind2].title}`,
+          data: points,
+          backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        }
+      ]
+    };
+  };
+
+  // Create data for radar chart comparison
+  const createRadarComparisonData = () => {
+    if (isLoading || selectedIndicators.length === 0) {
+      return {
+        labels: [],
+        datasets: []
+      };
+    }
+
+    // Normalize data for radar chart (all values from 0-100)
+    const normalizedData = selectedIndicators.map(ind => {
+      if (!indicators[ind] || !indicators[ind].data) return null;
+      
+      const data = indicators[ind].data;
+      const min = Math.min(...data);
+      const max = Math.max(...data);
+      const range = max - min;
+      
+      // Handle case where all values are the same
+      if (range === 0) return { ...indicators[ind], normalized: Array(data.length).fill(50) };
+      
+      // Normalize to 0-100 scale
+      const normalized = data.map(val => ((val - min) / range) * 100);
+      
+      return { ...indicators[ind], normalized };
+    }).filter(Boolean);
+
+    // Get the time periods (labels)
+    const timeLabels = normalizedData[0]?.labels?.slice(-6) || [];
+
+    // Create datasets for each time period
+    return {
+      labels: selectedIndicators.map(ind => indicators[ind]?.title || ind),
+      datasets: timeLabels.map((label, idx) => {
+        // Get the normalized value for each indicator at this time period
+        const dataPoints = normalizedData.map(ind => {
+          const dataIndex = ind.labels.indexOf(label);
+          return dataIndex >= 0 ? ind.normalized[dataIndex] : 0;
+        });
+
+        return {
+          label,
+          data: dataPoints,
+          backgroundColor: `${colors[idx % colors.length]}33`,
+          borderColor: colors[idx % colors.length],
+          borderWidth: 2,
+        };
+      })
+    };
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-700 mb-4">Indicator Comparison Tool</h3>
@@ -340,7 +451,7 @@ const ComparisonTool = ({ indicators, isLoading }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Select Indicators (Up to 2)
+                Select Indicators (Up to {comparisonMode === 'radar' ? '6' : '2'})
               </label>
               <div className="flex flex-wrap gap-2">
                 {indicatorOptions.map(option => (
@@ -349,7 +460,10 @@ const ComparisonTool = ({ indicators, isLoading }) => {
                     onClick={() => {
                       if (selectedIndicators.includes(option.value)) {
                         setSelectedIndicators(selectedIndicators.filter(i => i !== option.value));
-                      } else if (selectedIndicators.length < 2) {
+                      } else if (
+                        (comparisonMode === 'radar' && selectedIndicators.length < 6) ||
+                        (comparisonMode !== 'radar' && selectedIndicators.length < 2)
+                      ) {
                         setSelectedIndicators([...selectedIndicators, option.value]);
                       }
                     }}
@@ -386,15 +500,180 @@ const ComparisonTool = ({ indicators, isLoading }) => {
               </div>
             </div>
           </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Visualization Type
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setComparisonMode('line')}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  comparisonMode === 'line'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Line Chart
+              </button>
+              <button
+                onClick={() => {
+                  setComparisonMode('scatter');
+                  if (selectedIndicators.length > 2) {
+                    setSelectedIndicators(selectedIndicators.slice(0, 2));
+                  }
+                }}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  comparisonMode === 'scatter'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Scatter Plot
+              </button>
+              <button
+                onClick={() => setComparisonMode('radar')}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  comparisonMode === 'radar'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Radar Chart
+              </button>
+            </div>
+          </div>
           
           <div className="h-80">
-            <Line 
-              data={createComparisonData()} 
-              options={{
-                ...chartOptions,
-                maintainAspectRatio: false,
-              }} 
-            />
+            {comparisonMode === 'line' && (
+              <Line 
+                data={createLineComparisonData()} 
+                options={{
+                  ...chartOptions,
+                  maintainAspectRatio: false,
+                }} 
+              />
+            )}
+            {comparisonMode === 'scatter' && selectedIndicators.length >= 2 && (
+              <ScatterPlot 
+                data={createScatterComparisonData()} 
+                options={{
+                  maintainAspectRatio: false,
+                  xLabel: indicators[selectedIndicators[0]]?.title,
+                  yLabel: indicators[selectedIndicators[1]]?.title,
+                }} 
+              />
+            )}
+            {comparisonMode === 'radar' && (
+              <RadarChart 
+                data={createRadarComparisonData()} 
+                options={{
+                  maintainAspectRatio: false,
+                }} 
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Forecast Component
+const ForecastComponent = ({ indicators, isLoading }) => {
+  const [selectedIndicator, setSelectedIndicator] = useState('');
+  const [forecastPeriods, setForecastPeriods] = useState(6); // Default 6 months
+
+  useEffect(() => {
+    // Initialize with first indicator when data is loaded
+    if (!isLoading && Object.keys(indicators).length > 0) {
+      setSelectedIndicator(Object.keys(indicators)[0]);
+    }
+  }, [isLoading, indicators]);
+
+  const indicatorOptions = Object.keys(indicators).map(key => ({
+    value: key,
+    label: indicators[key]?.title || key
+  }));
+
+  const generateForecast = () => {
+    if (!selectedIndicator || !indicators[selectedIndicator]) {
+      return null;
+    }
+
+    return generateSimpleForecast(indicators[selectedIndicator], forecastPeriods);
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-700 mb-4">Economic Forecast</h3>
+      
+      {isLoading ? (
+        <LoadingSpinner message="Loading forecast data..." />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Indicator
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {indicatorOptions.map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => setSelectedIndicator(option.value)}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      selectedIndicator === option.value
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Forecast Horizon
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[3, 6, 12].map(periods => (
+                  <button
+                    key={periods}
+                    onClick={() => setForecastPeriods(periods)}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      forecastPeriods === periods
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {periods} {periods === 1 ? 'Period' : 'Periods'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="h-80">
+            {selectedIndicator && indicators[selectedIndicator] && (
+              <ForecastChart 
+                historicalData={indicators[selectedIndicator]} 
+                forecastData={generateForecast()}
+                options={{
+                  maintainAspectRatio: false,
+                  xLabel: 'Date',
+                  yLabel: `${indicators[selectedIndicator].title} (${indicators[selectedIndicator].unit})`,
+                }}
+                title={`${indicators[selectedIndicator].title} Forecast - Next ${forecastPeriods} Periods`}
+              />
+            )}
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-lg mt-4 text-sm text-blue-800">
+            <p className="font-semibold">About this forecast:</p>
+            <p>This is a simple forecasting model based on recent trends in the data. It uses a moving average approach to project future values and estimate confidence intervals. For more accurate forecasts, consider using advanced statistical methods or machine learning techniques.</p>
           </div>
         </>
       )}
@@ -515,6 +794,35 @@ const HeatMap = ({ indicators, isLoading }) => {
   );
 };
 
+// User Preferences Panel
+const UserPreferencesPanel = ({ indicators, favorites, onToggleFavorite, dateRange, onDateRangeChange }) => {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-700 mb-4">Dashboard Preferences</h3>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h4 className="font-medium text-gray-700 mb-3">Favorite Indicators</h4>
+          <FavoriteIndicators 
+            indicators={indicators} 
+            favorites={favorites} 
+            onToggleFavorite={onToggleFavorite} 
+          />
+        </div>
+        
+        <div>
+          <h4 className="font-medium text-gray-700 mb-3">Custom Date Range</h4>
+          <CustomDateRangePicker
+            onChange={onDateRangeChange}
+            initialStartDate={dateRange?.startDate}
+            initialEndDate={dateRange?.endDate}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Data Sources Component
 const DataSources = () => {
   const sources = [
@@ -540,11 +848,250 @@ const DataSources = () => {
   );
 };
 
+// Customizable Dashboard View
+const CustomDashboardView = ({ indicators, isLoading }) => {
+  // Initialize dashboard layout
+  const defaultLayout = [
+    { i: 'gdp', x: 0, y: 0, w: 6, h: 4 },
+    { i: 'unemployment', x: 6, y: 0, w: 6, h: 4 },
+    { i: 'inflation', x: 0, y: 4, w: 6, h: 4 },
+    { i: 'interest', x: 6, y: 4, w: 6, h: 4 },
+    { i: 'comparison', x: 0, y: 8, w: 12, h: 6 },
+    { i: 'forecast', x: 0, y: 14, w: 12, h: 6 },
+  ];
+  
+  const { layout, saveLayout, addPanel, removePanel } = useDashboardLayout(defaultLayout);
+  const [showPanelMenu, setShowPanelMenu] = useState(false);
+  const [selectedChartType, setSelectedChartType] = useState({});
+
+  // Chart types for indicators
+  const chartTypes = {
+    line: 'Line Chart',
+    bar: 'Bar Chart',
+    radar: 'Radar Chart'
+  };
+
+  // Map of available panels
+  const availablePanels = [
+    { id: 'gdp', title: 'GDP' },
+    { id: 'unemployment', title: 'Unemployment' },
+    { id: 'inflation', title: 'Inflation' },
+    { id: 'interest', title: 'Interest Rates' },
+    { id: 'stocks', title: 'Stock Market' },
+    { id: 'housing', title: 'Housing' },
+    { id: 'trade', title: 'Trade Balance' },
+    { id: 'manufacturing', title: 'Manufacturing' },
+    { id: 'comparison', title: 'Comparison Tool' },
+    { id: 'forecast', title: 'Forecast' },
+    { id: 'heatmap', title: 'Correlation Heatmap' },
+  ];
+
+  // Handle layout change
+  const handleLayoutChange = (newLayout) => {
+    saveLayout(newLayout);
+  };
+
+  // Add a new panel
+  const handleAddPanel = (panelId) => {
+    const existingPanel = layout.find(item => item.i === panelId);
+    
+    if (!existingPanel) {
+      const newPanel = {
+        i: panelId,
+        x: 0,
+        y: 0,
+        w: 6,
+        h: 4
+      };
+      
+      addPanel(newPanel);
+    }
+    
+    setShowPanelMenu(false);
+  };
+
+  // Render panel content based on panel ID
+  const renderPanelContent = (panelId) => {
+    // If it's an indicator panel
+    if (indicators[panelId]) {
+      const chartType = selectedChartType[panelId] || 'line';
+      
+      if (chartType === 'line') {
+        return (
+          <Line 
+            data={createChartData(indicators[panelId], '#3B82F6')} 
+            options={chartOptions} 
+          />
+        );
+      } else if (chartType === 'bar') {
+        return (
+          <Bar 
+            data={createChartData(indicators[panelId], '#10B981')} 
+            options={chartOptions} 
+          />
+        );
+      } else if (chartType === 'radar') {
+        return (
+          <RadarChart 
+            data={createRadarData(
+              indicators[panelId].labels.slice(-6),
+              [{
+                label: indicators[panelId].title,
+                data: indicators[panelId].data.slice(-6),
+                color: '#8B5CF6'
+              }]
+            )}
+            options={{ responsive: true }}
+          />
+        );
+      }
+    }
+    
+    // Special panels
+    switch(panelId) {
+      case 'comparison':
+        return <ComparisonTool indicators={indicators} isLoading={isLoading} />;
+      case 'forecast':
+        return <ForecastComponent indicators={indicators} isLoading={isLoading} />;
+      case 'heatmap':
+        return <HeatMap indicators={indicators} isLoading={isLoading} />;
+      default:
+        return <div className="flex items-center justify-center h-full">No data available</div>;
+    }
+  };
+
+  // Get panel title based on panel ID
+  const getPanelTitle = (panelId) => {
+    if (indicators[panelId]) {
+      return indicators[panelId].title;
+    }
+    
+    const panel = availablePanels.find(p => p.id === panelId);
+    return panel ? panel.title : 'Dashboard Panel';
+  };
+
+  // Handle changing chart type for an indicator panel
+  const handleChartTypeChange = (panelId, type) => {
+    setSelectedChartType({
+      ...selectedChartType,
+      [panelId]: type
+    });
+  };
+
+  // Panel edit menu for indicator panels
+  const renderPanelEditMenu = (panelId) => {
+    if (!indicators[panelId]) return null;
+    
+    return (
+      <div className="absolute top-12 right-2 z-10 bg-white shadow-lg rounded-lg p-2 border">
+        <div className="font-medium text-gray-700 mb-1 text-sm">Chart Type:</div>
+        {Object.entries(chartTypes).map(([type, label]) => (
+          <button
+            key={type}
+            onClick={() => handleChartTypeChange(panelId, type)}
+            className={`block w-full text-left px-3 py-1 text-sm rounded ${
+              (selectedChartType[panelId] || 'line') === type
+                ? 'bg-indigo-100 text-indigo-700'
+                : 'hover:bg-gray-100'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="custom-dashboard mb-8">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-gray-800">Customizable Dashboard</h2>
+        <button
+          onClick={() => setShowPanelMenu(!showPanelMenu)}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
+        >
+          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Panel
+        </button>
+      </div>
+      
+      {showPanelMenu && (
+        <div className="bg-white shadow-lg rounded-lg p-4 mb-4 border">
+          <h3 className="font-medium text-gray-700 mb-2">Available Panels</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {availablePanels.map(panel => {
+              const isAlreadyAdded = layout.some(item => item.i === panel.id);
+              
+              return (
+                <button
+                  key={panel.id}
+                  onClick={() => handleAddPanel(panel.id)}
+                  className={`px-3 py-2 text-sm rounded-lg ${
+                    isAlreadyAdded
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                  }`}
+                  disabled={isAlreadyAdded}
+                >
+                  {panel.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
+      {isLoading ? (
+        <LoadingSpinner message="Loading dashboard data..." />
+      ) : (
+        <CustomizableDashboard
+          layout={layout}
+          onLayoutChange={handleLayoutChange}
+          containerClassName="min-h-[800px]"
+        >
+          {layout.map(panel => (
+            <div key={panel.i} data-grid={panel}>
+              <DashboardPanel
+                title={getPanelTitle(panel.i)}
+                onRemove={() => removePanel(panel.i)}
+                onEdit={() => {
+                  // Only show edit menu for indicator panels
+                  if (indicators[panel.i]) {
+                    const currentPanelId = panel.i;
+                    setSelectedChartType(prev => ({
+                      ...prev,
+                      [currentPanelId]: prev[currentPanelId] ? undefined : (prev[currentPanelId] || 'line')
+                    }));
+                  }
+                }}
+                className="h-full"
+              >
+                {selectedChartType[panel.i] !== undefined && renderPanelEditMenu(panel.i)}
+                {renderPanelContent(panel.i)}
+              </DashboardPanel>
+            </div>
+          ))}
+        </CustomizableDashboard>
+      )}
+    </div>
+  );
+};
+
 // Main Dashboard Component
 const Dashboard = () => {
   const [indicators, setIndicators] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(new Date().setFullYear(new Date().getFullYear() - 2)),
+    endDate: new Date()
+  });
+  const [viewMode, setViewMode] = useState('standard'); // 'standard' or 'custom'
+  
+  // Use the favorites custom hook
+  const { favorites, toggleFavorite } = useFavorites(['gdpGrowth', 'unemployment']);
 
   // List of FRED series IDs to fetch
   const indicatorKeys = [
@@ -564,9 +1111,23 @@ const Dashboard = () => {
         setIsLoading(true);
         
         // Fetch data from FRED API
-        const data = await fetchMultipleFredSeries(indicatorKeys);
+        const fredData = await fetchMultipleFredSeries(indicatorKeys);
         
-        setIndicators(data);
+        // Fetch some world bank data for comparison
+        let worldBankData = {};
+        try {
+          const worldBankGDP = await fetchWorldBankData(WORLD_BANK_DATASETS.gdpGrowth.id);
+          worldBankData = {
+            worldBankGDP
+          };
+        } catch (error) {
+          console.error('Error fetching World Bank data (continuing with FRED data):', error);
+        }
+        
+        setIndicators({
+          ...fredData,
+          ...worldBankData
+        });
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching economic data:', error);
@@ -577,6 +1138,13 @@ const Dashboard = () => {
 
     fetchData();
   }, []);
+
+  // Handle date range change
+  const handleDateRangeChange = (newRange) => {
+    setDateRange(newRange);
+    // In a real app, we'd refetch data based on the new date range
+    console.log('Date range changed:', newRange);
+  };
 
   if (error) {
     return (
@@ -596,24 +1164,66 @@ const Dashboard = () => {
     <div className="bg-gray-50 min-h-screen">
       <Header />
       <main className="container mx-auto px-4 py-8">
-        <DashboardSection title="Current Economic Indicators">
-          <IndicatorsGrid indicators={indicators} isLoading={isLoading} />
-        </DashboardSection>
-        
-        <DashboardSection title="Historical Trends">
-          <ChartGrid indicators={indicators} isLoading={isLoading} />
-        </DashboardSection>
-        
-        <DashboardSection title="Comparison & Analysis">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ComparisonTool indicators={indicators} isLoading={isLoading} />
-            <HeatMap indicators={indicators} isLoading={isLoading} />
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-800">Economic Dashboard</h1>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setViewMode('standard')}
+              className={`px-4 py-2 rounded-lg ${
+                viewMode === 'standard' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Standard View
+            </button>
+            <button
+              onClick={() => setViewMode('custom')}
+              className={`px-4 py-2 rounded-lg ${
+                viewMode === 'custom' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Custom View
+            </button>
           </div>
-        </DashboardSection>
+        </div>
         
-        <DashboardSection title="About the Data">
-          <DataSources />
-        </DashboardSection>
+        {viewMode === 'standard' ? (
+          <>
+            <DashboardSection title="Current Economic Indicators">
+              <IndicatorsGrid indicators={indicators} isLoading={isLoading} favorites={favorites} />
+            </DashboardSection>
+            
+            <DashboardSection title="Historical Trends">
+              <ChartGrid indicators={indicators} isLoading={isLoading} selectedIndicators={favorites} />
+            </DashboardSection>
+            
+            <DashboardSection title="Advanced Analysis">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ComparisonTool indicators={indicators} isLoading={isLoading} />
+                <ForecastComponent indicators={indicators} isLoading={isLoading} />
+              </div>
+            </DashboardSection>
+            
+            <DashboardSection title="Your Preferences">
+              <UserPreferencesPanel
+                indicators={indicators}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+              />
+            </DashboardSection>
+            
+            <DashboardSection title="About the Data">
+              <DataSources />
+            </DashboardSection>
+          </>
+        ) : (
+          <CustomDashboardView indicators={indicators} isLoading={isLoading} />
+        )}
       </main>
     </div>
   );
