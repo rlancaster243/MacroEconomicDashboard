@@ -9,7 +9,7 @@ A full-stack, API-driven economic dashboard for visualizing and analyzing macroe
 ---
 
 ## 🌐 Live Demo
-> Deployed at: [https://macroeconomicdashboard.vercel.app](https://macroeconomicdashboard.vercel.app)
+> Deployed at: https://macro-economic-dashboard.vercel.app/
 
 ---
 
