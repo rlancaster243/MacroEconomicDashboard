@@ -1,4 +1,4 @@
-# 📊 MacroEconomicDashboard
+# 📊 Macro Economic Dashboard
 
 A full-stack, API-driven economic dashboard for visualizing and analyzing macroeconomic indicators like GDP, Inflation, Unemployment, and Interest Rates across countries. Built with modern JavaScript frameworks and deployed on [Vercel](https://vercel.com), this project integrates directly with leading macroeconomic data sources including:
 
