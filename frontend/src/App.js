@@ -28,6 +28,9 @@ import {
   WORLD_BANK_INDICATORS
 } from "./services/worldBankService";
 
+// Import mock data for fallback
+import { mockData } from "./mockData";
+
 // Import components
 import LoadingSpinner from "./components/LoadingSpinner";
 import ScatterPlot, { createScatterData } from "./components/ScatterPlot";
