@@ -1120,19 +1120,54 @@ const Dashboard = () => {
         // Fetch data from FRED API
         const fredData = await fetchMultipleFredSeries(indicatorKeys);
         
-        // Fetch some world bank data for comparison
-        let worldBankData = {};
+        // Fetch BEA data
+        let beaData = {};
         try {
-          const worldBankGDP = await fetchWorldBankData(WORLD_BANK_DATASETS.gdpGrowth.id);
-          worldBankData = {
-            worldBankGDP
+          const beaGDP = await fetchGDPData();
+          const beaTradeBalance = await fetchTradeBalanceData();
+          beaData = {
+            beaGDP,
+            beaTradeBalance
           };
         } catch (error) {
-          console.error('Error fetching World Bank data (continuing with FRED data):', error);
+          console.error('Error fetching BEA data (continuing with other sources):', error);
+        }
+        
+        // Fetch BLS data
+        let blsData = {};
+        try {
+          const blsResults = await fetchMultipleBLSSeries([
+            BLS_SERIES.unemployment.id,
+            BLS_SERIES.cpi.id,
+            BLS_SERIES.wages.id
+          ]);
+          blsData = {
+            blsUnemployment: blsResults[BLS_SERIES.unemployment.id],
+            blsCPI: blsResults[BLS_SERIES.cpi.id],
+            blsWages: blsResults[BLS_SERIES.wages.id]
+          };
+        } catch (error) {
+          console.error('Error fetching BLS data (continuing with other sources):', error);
+        }
+        
+        // Fetch World Bank data
+        let worldBankData = {};
+        try {
+          const worldBankIndicators = [
+            WORLD_BANK_INDICATORS.gdpGrowth,
+            WORLD_BANK_INDICATORS.inflation,
+            WORLD_BANK_INDICATORS.manufacturing
+          ];
+          const worldBankResults = await fetchMultipleWorldBankIndicators(worldBankIndicators);
+          worldBankData = worldBankResults;
+        } catch (error) {
+          console.error('Error fetching World Bank data (continuing with other sources):', error);
         }
         
         setIndicators({
           ...fredData,
+          ...beaData,
+          ...blsData,
           ...worldBankData
         });
         setIsLoading(false);
