@@ -91,18 +91,11 @@ export const fetchBLSData = async (seriesId, options = {}) => {
  * @returns {string} - Series title
  */
 const getBLSSeriesTitle = (seriesId) => {
-  switch(seriesId) {
-    case BLS_SERIES.unemployment:
-      return 'Unemployment Rate';
-    case BLS_SERIES.cpi:
-      return 'Consumer Price Index';
-    case BLS_SERIES.payroll:
-      return 'Nonfarm Payroll';
-    case BLS_SERIES.wages:
-      return 'Average Hourly Earnings';
-    default:
-      return 'BLS Data';
-  }
+  if (seriesId === BLS_SERIES.unemployment.id) return 'Unemployment Rate';
+  if (seriesId === BLS_SERIES.cpi.id) return 'Consumer Price Index';
+  if (seriesId === BLS_SERIES.payroll.id) return 'Nonfarm Payroll';
+  if (seriesId === BLS_SERIES.wages.id) return 'Average Hourly Earnings';
+  return 'BLS Data';
 };
 
 /**
@@ -111,18 +104,11 @@ const getBLSSeriesTitle = (seriesId) => {
  * @returns {string} - Unit designation
  */
 const getBLSSeriesUnit = (seriesId) => {
-  switch(seriesId) {
-    case BLS_SERIES.unemployment:
-      return '%';
-    case BLS_SERIES.cpi:
-      return 'Index';
-    case BLS_SERIES.payroll:
-      return 'Thousands';
-    case BLS_SERIES.wages:
-      return '$';
-    default:
-      return '';
-  }
+  if (seriesId === BLS_SERIES.unemployment.id) return '%';
+  if (seriesId === BLS_SERIES.cpi.id) return 'Index';
+  if (seriesId === BLS_SERIES.payroll.id) return 'Thousands';
+  if (seriesId === BLS_SERIES.wages.id) return '$';
+  return '';
 };
 
 /**
