@@ -1136,11 +1136,17 @@ const Dashboard = () => {
         // Fetch BLS data
         let blsData = {};
         try {
-          const blsResults = await fetchMultipleBLSSeries([
+          // Get array of series IDs for BLS
+          const blsSeriesIds = [
             BLS_SERIES.unemployment.id,
             BLS_SERIES.cpi.id,
             BLS_SERIES.wages.id
-          ]);
+          ];
+          
+          // Fetch BLS data
+          const blsResults = await fetchMultipleBLSSeries(blsSeriesIds);
+          
+          // Map results to appropriate keys
           blsData = {
             blsUnemployment: blsResults[BLS_SERIES.unemployment.id],
             blsCPI: blsResults[BLS_SERIES.cpi.id],
@@ -1153,23 +1159,28 @@ const Dashboard = () => {
         // Fetch World Bank data
         let worldBankData = {};
         try {
-          const worldBankIndicators = [
+          // Get array of indicator IDs for World Bank
+          const worldBankIndicatorIds = [
             WORLD_BANK_INDICATORS.gdpGrowth,
             WORLD_BANK_INDICATORS.inflation,
             WORLD_BANK_INDICATORS.manufacturing
           ];
-          const worldBankResults = await fetchMultipleWorldBankIndicators(worldBankIndicators);
+          
+          // Fetch World Bank data
+          const worldBankResults = await fetchMultipleWorldBankIndicators(worldBankIndicatorIds);
           worldBankData = worldBankResults;
         } catch (error) {
           console.error('Error fetching World Bank data (continuing with other sources):', error);
         }
         
+        // Set all indicators in state
         setIndicators({
           ...fredData,
           ...beaData,
           ...blsData,
           ...worldBankData
         });
+        
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching economic data:', error);
