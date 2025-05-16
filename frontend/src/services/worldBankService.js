@@ -1,6 +1,7 @@
 import axios from 'axios';
+import moment from 'moment';
 
-// World Bank API doesn't necessarily require an API key for basic functionality
+// World Bank API doesn't require authentication
 const WORLD_BANK_BASE_URL = 'https://api.worldbank.org/v2';
 
 // Country code for United States
@@ -69,6 +70,28 @@ export const fetchWorldBankData = async (indicator, options = {}) => {
     };
   } catch (error) {
     console.error(`Error fetching World Bank data for indicator ${indicator}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch multiple World Bank indicators
+ * @param {Array} indicators - Array of World Bank indicator codes
+ * @param {Object} options - Optional parameters
+ * @returns {Promise<Object>} - Object with processed results for each indicator
+ */
+export const fetchMultipleWorldBankIndicators = async (indicators, options = {}) => {
+  try {
+    const promises = indicators.map(indicator => fetchWorldBankData(indicator, options));
+    const results = await Promise.all(promises);
+    
+    return results.reduce((acc, result, index) => {
+      const indicatorKey = `worldBank_${indicators[index].replace(/\./g, '_')}`;
+      acc[indicatorKey] = result;
+      return acc;
+    }, {});
+  } catch (error) {
+    console.error('Error fetching multiple World Bank indicators:', error);
     throw error;
   }
 };
